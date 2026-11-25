@@ -1,0 +1,5 @@
+# Recordings can contain your shades' serials or keys. Never commit them.
+logs/
+replay.json
+__pycache__/
+.DS_Store

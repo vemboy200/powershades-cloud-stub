@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PowerShades Relay</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #667085; --line: #e3e6eb;
+    --shade: #2563eb; --shade-bg: #eaf1ff; --cloud: #0f8a5f; --cloud-bg: #e6f6ef;
+    --event: #8a5a00; --event-bg: #fff4dc; --bad: #b42318; --bad-bg: #fdecea; --mark: #7c3aed;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #11141a; --panel: #1a1e26; --text: #e6e8ec; --muted: #9aa3b2; --line: #2a303b;
+      --shade: #7aa7ff; --shade-bg: #1b2a45; --cloud: #4fd1a1; --cloud-bg: #14332a;
+      --event: #f2c46d; --event-bg: #3a2f17; --bad: #ff8a80; --bad-bg: #3d1d1b; --mark: #b79cff;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, Segoe UI, sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 16px; }
+  h1 { font-size: 16px; margin: 0 0 4px; }
+  .meta { color: var(--muted); font-size: 12px; }
+  .meta code { font-family: var(--mono); color: var(--text); }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 10px; }
+  select, button { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; }
+  button { cursor: pointer; }
+  label { display: inline-flex; gap: 6px; align-items: center; color: var(--muted); }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 20px; }
+  .stat span { color: var(--muted); font-size: 12px; }
+  details.session { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; margin-bottom: 10px; }
+  details.session > summary { cursor: pointer; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; list-style: none; }
+  details.session > summary::-webkit-details-marker { display: none; }
+  details.session > summary::before { content: "▸"; color: var(--muted); }
+  details.session[open] > summary::before { content: "▾"; }
+  .sid { font-weight: 600; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .rows { border-top: 1px solid var(--line); padding: 6px 12px 12px; }
+  .row { padding: 8px 0; border-bottom: 1px dashed var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .tag { display: inline-block; font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; margin-right: 8px; }
+  .t-shade { color: var(--shade); background: var(--shade-bg); }
+  .t-cloud { color: var(--cloud); background: var(--cloud-bg); }
+  .t-event { color: var(--event); background: var(--event-bg); }
+  .t-bad { color: var(--bad); background: var(--bad-bg); }
+  .size128 { color: var(--mark); font-weight: 600; font-size: 12px; margin-left: 6px; }
+  pre { font-family: var(--mono); font-size: 12px; margin: 6px 0 0; padding: 8px; background: var(--bg); border-radius: 6px; overflow-x: auto; white-space: pre; }
+  .copy { font-size: 11px; padding: 1px 6px; margin-left: 6px; }
+  .empty { text-align: center; color: var(--muted); padding: 40px 16px; background: var(--panel); border: 1px dashed var(--line); border-radius: 8px; }
+  @media (max-width: 600px) { pre { font-size: 10.5px; } .stat b { font-size: 17px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>PowerShades Relay</h1>
+  <div class="meta" id="info">Loading…</div>
+  <div class="controls">
+    <label>Day <select id="day"></select></label>
+    <label>Show
+      <select id="filter">
+        <option value="all">Everything</option>
+        <option value="data">Data only</option>
+        <option value="shade">Shade → cloud</option>
+        <option value="cloud">Cloud → shade</option>
+      </select>
+    </label>
+    <label><input type="checkbox" id="auto" checked> Refresh every 5 s</label>
+    <button id="refresh">Refresh now</button>
+    <span class="muted" id="updated"></span>
+  </div>
+</header>
+<main>
+  <div class="stats" id="stats"></div>
+  <div id="sessions"></div>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const openSessions = new Set();
+let currentDay = null;
+
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+function hexdump(hex) {
+  const bytes = hex.match(/../g) || [];
+  const lines = [];
+  for (let off = 0; off < bytes.length; off += 16) {
+    const chunk = bytes.slice(off, off + 16);
+    const h = chunk.join(" ").padEnd(47, " ");
+    const a = chunk.map(b => { const n = parseInt(b, 16); return n >= 32 && n < 127 ? String.fromCharCode(n) : "."; }).join("");
+    lines.push(off.toString(16).padStart(4, "0") + "  " + h + "  " + a);
+  }
+  return lines.join("\n");
+}
+
+function localTime(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", second: "2-digit"}) + "." + String(d.getMilliseconds()).padStart(3, "0");
+}
+
+function kind(ev) {
+  if (ev === "shade->cloud") return ["shade", "t-shade", "Shade → cloud"];
+  if (ev === "cloud->shade") return ["cloud", "t-cloud", "Cloud → shade"];
+  if (/failed|error|rejected/.test(ev)) return ["event", "t-bad", ev];
+  return ["event", "t-event", ev];
+}
+
+async function loadInfo() {
+  const info = await (await fetch("api/info")).json();
+  $("info").innerHTML = `Mode <code>${esc(info.mode)}</code> · port <code>${info.port}</code> → <code>${esc(info.upstream)}</code> · allowed <code>${esc(info.allowed.join(", "))}</code>`;
+  const sel = $("day");
+  const prev = sel.value;
+  sel.innerHTML = info.days.map(d => `<option>${d}</option>`).join("") || "<option value=''>No logs yet</option>";
+  sel.value = info.days.includes(prev) ? prev : (info.days[0] || "");
+}
+
+async function loadRecords() {
+  const day = $("day").value;
+  if (day !== currentDay) { openSessions.clear(); currentDay = day; }
+  const records = day ? await (await fetch("api/records?day=" + encodeURIComponent(day))).json() : [];
+  render(records);
+  $("updated").textContent = "Updated " + new Date().toLocaleTimeString();
+}
+
+function render(records) {
+  const filter = $("filter").value;
+  const sessions = new Map();
+  let up = 0, down = 0, chunks = 0;
+  for (const r of records) {
+    if (r.session === 0) continue;
+    if (!sessions.has(r.session)) sessions.set(r.session, []);
+    sessions.get(r.session).push(r);
+    if (r.hex !== undefined) { chunks++; (r.event === "shade->cloud" ? (up += r.hex.length / 2) : (down += r.hex.length / 2)); }
+  }
+  $("stats").innerHTML = [
+    [sessions.size, "connections"], [chunks, "data chunks"], [up, "bytes shade → cloud"], [down, "bytes cloud → shade"],
+  ].map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join("");
+
+  if (!sessions.size) {
+    $("sessions").innerHTML = `<div class="empty">Nothing received yet on this day.<br>Connections appear here when the shade checks in.</div>`;
+    return;
+  }
+  const html = [];
+  for (const [id, rows] of [...sessions].reverse()) {
+    const start = rows[0];
+    const client = (rows.find(r => r.client) || {}).client || "?";
+    const bytes = rows.reduce((n, r) => n + (r.hex ? r.hex.length / 2 : 0), 0);
+    const done = rows.some(r => r.event === "done" || r.event === "rejected" || r.event === "upstream failed");
+    const shown = rows.filter(r => {
+      const [k] = kind(r.event);
+      if (filter === "data") return r.hex !== undefined;
+      if (filter === "shade" || filter === "cloud") return k === filter;
+      return true;
+    });
+    html.push(`<details class="session" data-id="${id}" ${openSessions.has(id) ? "open" : ""}>
+      <summary><span class="sid">Connection #${id}</span><span>${esc(client)}</span>
+      <span class="muted">${localTime(start.time)} · ${bytes} bytes · ${done ? "closed" : "open"}</span></summary>
+      <div class="rows">${shown.map(row).join("") || '<div class="muted">Nothing matches this filter.</div>'}</div></details>`);
+  }
+  $("sessions").innerHTML = html.join("");
+  document.querySelectorAll("details.session").forEach(d => d.addEventListener("toggle", () => {
+    const id = Number(d.dataset.id); d.open ? openSessions.add(id) : openSessions.delete(id);
+  }));
+}
+
+function row(r) {
+  const [, cls, label] = kind(r.event);
+  const extra = Object.entries(r).filter(([k]) => !["time", "session", "event", "hex"].includes(k))
+    .map(([k, v]) => `${esc(k)}=${esc(v)}`).join("  ");
+  let body = "";
+  if (r.hex !== undefined) {
+    const n = r.hex.length / 2;
+    body = `<span class="muted">${n} bytes</span>${n === 128 ? '<span class="size128">128-byte block</span>' : ""}
+      <button class="copy" data-hex="${r.hex}">Copy hex</button><pre>${esc(hexdump(r.hex))}</pre>`;
+  }
+  return `<div class="row"><span class="tag ${cls}">${esc(label)}</span><span class="muted">${localTime(r.time)}</span>
+    ${extra ? `<span class="muted"> · ${extra}</span>` : ""}${body ? "<div>" + body + "</div>" : ""}</div>`;
+}
+
+document.addEventListener("click", (e) => {
+  const b = e.target.closest(".copy");
+  if (!b) return;
+  navigator.clipboard?.writeText(b.dataset.hex).then(() => { b.textContent = "Copied"; setTimeout(() => b.textContent = "Copy hex", 1200); });
+});
+
+async function refresh() { try { await loadInfo(); await loadRecords(); } catch (e) { $("updated").textContent = "Couldn't reach the relay"; } }
+$("refresh").onclick = refresh;
+$("day").onchange = loadRecords;
+$("filter").onchange = loadRecords;
+setInterval(() => { if ($("auto").checked && !document.hidden) refresh(); }, 5000);
+refresh();
+</script>
+</body>
+</html>

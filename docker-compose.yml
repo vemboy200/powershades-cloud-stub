@@ -1,0 +1,30 @@
+# PowerShades cloud stub: answers a PowerShades shade's cloud connection (TCP port 60) on your own network.
+# Point powershades.com at this machine with a per-device DNS rewrite (see README), then start it with `docker compose up -d`.
+# Host networking so the logs show each shade's real IP.
+name: powershades-cloud-stub
+
+services:
+  stub:
+    container_name: powershades-cloud-stub
+    image: python:3.14.9-alpine3.24
+    restart: unless-stopped
+    network_mode: host
+    command: ["python", "-u", "/app/relay.py"]
+    volumes:
+      - ./relay.py:/app/relay.py:ro
+      - ./viewer.html:/app/viewer.html:ro
+      # Only needed for MODE=replay. Make it from one of your own recordings with make_replay.py.
+      # - ./replay.json:/app/replay.json:ro
+      - ./logs:/logs
+    environment:
+      - LISTEN_PORT=60
+      # Only used in relay mode. Gen 1 shades use dashboard.powershades.com, Gen 2 use cloudserver.powershades.com.
+      - UPSTREAM=dashboard.powershades.com:60
+      # Your shades' IPs, comma-separated. Anything else is logged and hung up on.
+      - ALLOWED_CLIENTS=192.168.1.50,192.168.1.51
+      # listen: accept and never reply (no PowerShades cloud). relay: pass through to the real cloud and log it. replay: play back replay.json.
+      - MODE=listen
+      # Optional per-shade override, e.g. 192.168.1.51=relay
+      - CLIENT_MODES=
+      # Read-only log viewer. Keep it on your home network: it shows raw traffic. 0 turns it off.
+      - WEB_PORT=8060
