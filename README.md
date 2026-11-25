@@ -17,7 +17,7 @@ Shades are controlled locally over UDP, but each one also keeps a TCP connection
 
 The idea here: let powershades.com resolve to a machine on your network, so the shade has something to connect to. It never needs to work, it just needs the shade to be happy enough to keep answering local commands.
 
-The real handshake is encrypted challenge-response (the shade adds its own random data every time), so this does **not** pretend to be the real cloud. Pull requests for anything fancier are welcome.
+This does **not** implement the PowerShades cloud. The real handshake is encrypted challenge-response (the shade adds its own random data every time), and local UDP control already covers everything, so the goal is only to keep the shade happy. Fully supporting the cloud process isn't planned, but pull requests that add it are welcome.
 
 ## Modes
 
