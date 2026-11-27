@@ -33,14 +33,19 @@ Before changing anything, find out:
 
 
   async def main(local_ip: str) -> None:
-      for dev in sorted(await async_discover_devices([local_ip]), key=lambda d: d["ip"]):
-          conn = PowerShadesConnection(dev["ip"])
+      # Discovery is a single broadcast, and a busy shade can miss it, so do a few rounds.
+      found = {}
+      for _ in range(3):
+          for dev in await async_discover_devices([local_ip]):
+              found[dev["ip"]] = dev
+      for ip in sorted(found, key=lambda ip: tuple(map(int, ip.split(".")))):
+          conn = PowerShadesConnection(ip)
           await conn.async_connect()
           try:
               device_id = parse_device_id_reply(await conn.async_request(OP_GET_DEVICE_ID))
               serial = parse_serial_reply(await conn.async_request(OP_GET_SERIAL))
           except PowerShadesTimeoutError:
-              print(dev["ip"], "didn't answer")
+              print(ip, "didn't answer")
               continue
           finally:
               conn.close()
@@ -49,14 +54,15 @@ Before changing anything, find out:
           else:
               gen = "Gen 2" if device_id.model_version == 2 else "Gen 1"
           hostname = serial["server_hostname"] if serial else None
-          print(dev["ip"], gen, hostname)
+          print(ip, gen, hostname)
+      print(f"{len(found)} shades found")
 
 
   # Argument: this machine's own LAN IP (the interface to broadcast from), not the broadcast address.
   asyncio.run(main(sys.argv[1]))
   ```
 
-  It prints one line per shade, such as `192.168.1.50 Gen 1 dashboard.powershades.com`. Everything it sends is a read-only request (discovery, Get Device ID, Get Serial Number), so it doesn't change or move anything. On macOS, the first run may trigger a local network permission prompt, and a sandboxed agent may see no shades until the broadcast is allowed.
+  It prints one line per shade, such as `192.168.1.50 Gen 1 dashboard.powershades.com`, then how many it found. Discovery is a single UDP broadcast and a shade can occasionally miss it, so the script does three rounds and combines them. Still check the count with the person ("I found 15 shades, does that match?") and run it again if one is missing. Everything it sends is a read-only request (discovery, Get Device ID, Get Serial Number), so it doesn't change or move anything. On macOS, the first run may trigger a local network permission prompt, and a sandboxed agent may see no shades until the broadcast is allowed.
 
   What to do with the results:
   - **IPs** go in `ALLOWED_CLIENTS` and the DNS rule. Check they're fixed (DHCP reservations), since both depend on them.
