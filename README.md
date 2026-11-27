@@ -47,6 +47,8 @@ Rewrite powershades.com to the stub machine's IP **for the shades only**. With A
 
 Pi-hole and many routers can do the same with a local DNS record, though that usually applies to every device on the network. The shades are left untouched, so undoing it is just removing the rule. This is the recommended method.
 
+The shades use whichever DNS server DHCP gives them (there's no DNS server setting on the shade itself). So if your router can hand out a different DNS server to specific devices, you can point just the shades at a DNS server that has the rewrite, such as a Pi-hole, and leave everything else on your normal DNS. Not tested here, and not every router offers per-device DHCP options.
+
 ### Method 2: Server Hostname on the shade
 
 Each shade has a Server Hostname setting (factory value `dashboard.powershades.com` on Gen 1, `cloudserver.powershades.com` on Gen 2), which you can change with the Home Assistant integration's `powershades.set_server_hostname` action or PowerShades' Config.NET app. The shade always looks this value up through your normal DNS server, so it has to be a name that DNS can answer. Tested on Gen 1:
