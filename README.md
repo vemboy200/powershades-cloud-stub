@@ -45,14 +45,18 @@ Rewrite powershades.com to the stub machine's IP **for the shades only**. With A
 ||powershades.com^$client=192.168.1.50|192.168.1.51,dnsrewrite=192.168.1.10
 ```
 
-Pi-hole and many routers can do the same with a local DNS record, though that usually applies to every device on the network. The shades are left untouched, so undoing it is just removing the rule. This is the method that has been tested.
+Pi-hole and many routers can do the same with a local DNS record, though that usually applies to every device on the network. The shades are left untouched, so undoing it is just removing the rule. This is the recommended method.
 
 ### Method 2: Server Hostname on the shade
 
-Each shade has a Server Hostname setting (factory value `dashboard.powershades.com` on Gen 1, `cloudserver.powershades.com` on Gen 2). Set it to the stub machine's IP or hostname, for example with the Home Assistant integration's `powershades.set_server_hostname` action or PowerShades' Config.NET app. No DNS server needed, and it's set per shade.
+Each shade has a Server Hostname setting (factory value `dashboard.powershades.com` on Gen 1, `cloudserver.powershades.com` on Gen 2), which you can change with the Home Assistant integration's `powershades.set_server_hostname` action or PowerShades' Config.NET app. The shade always looks this value up through your normal DNS server, so it has to be a name that DNS can answer. Tested on Gen 1:
 
-> [!NOTE]
-> Not tested yet. The Home Assistant integration will raise a repair saying the shade isn't talking to PowerShades' servers; that's expected, and you can ignore it for that hostname. A factory reset puts the original hostname back.
+| Server Hostname | Result |
+|---|---|
+| An IP address (e.g. `192.168.1.10`) | Doesn't work. The shade sends the IP to DNS as if it were a name and gets "no such name" back. |
+| An mDNS name (e.g. `nas.local`) | Doesn't work. The shade doesn't use mDNS, so the lookup fails the same way. |
+
+A name your DNS server resolves to the stub machine should work, but at that point Method 1 is simpler and leaves the shades untouched. If you change the hostname anyway, the Home Assistant integration will raise a repair saying the shade isn't talking to PowerShades' servers, and a factory reset puts the original hostname back.
 
 ## What to expect
 
