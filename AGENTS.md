@@ -77,7 +77,32 @@ Before changing anything, find out:
 2. **DNS rewrite**, for the shades only:
    - AdGuard Home: a custom filtering rule `||powershades.com^$client=<shade IPs separated by |>,dnsrewrite=<stub IP>`.
    - Pi-hole or a router: a local DNS record for `dashboard.powershades.com` (and `cloudserver.powershades.com` for Gen 2) pointing at the stub IP. This usually applies to every device on the network; tell the person before adding it.
-3. **Wait for the shades to reconnect.** They pick up the new address at their next daily reconnect, or after a reboot.
+3. **Wait for the shades to reconnect.** They pick up the new address at their next daily reconnect, or right away after a reboot. Waiting is the default. Only reboot a shade if the person wants results now and says it's fine: the reboot itself didn't move the shade when tested (Gen 1, once), but its LED lights up and it drops out of local control for a few seconds, which anyone in the room may notice. To reboot one shade with pyowershades:
+
+   ```python
+   import asyncio
+   import sys
+
+   from pyowershades import OP_REBOOT, PowerShadesConnection, PowerShadesTimeoutError
+
+
+   async def main(ip: str) -> None:
+       conn = PowerShadesConnection(ip)
+       await conn.async_connect()
+       try:
+           # retries=0: a Gen 1 shade reboots without acknowledging, and retrying would reboot it again.
+           await conn.async_request(OP_REBOOT, retries=0)
+       except PowerShadesTimeoutError:
+           pass  # expected, see above
+       finally:
+           conn.close()
+       print("Reboot sent to", ip)
+
+
+   asyncio.run(main(sys.argv[1]))
+   ```
+
+   Run it with the shade's IP. If the person uses the Home Assistant integration, its Reboot button does the same thing (it may report that the shade didn't acknowledge, even though it rebooted).
 
 ## Check it worked
 
