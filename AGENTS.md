@@ -102,7 +102,7 @@ Before changing anything, find out:
    asyncio.run(main(sys.argv[1]))
    ```
 
-   Run it with the shade's IP. If the person uses the Home Assistant integration, its Reboot button on the shade's device page does the same thing (it may report that the shade didn't acknowledge, even though it rebooted). An agent can only press it through Home Assistant access it's been given, such as a Home Assistant MCP server or an API token. Otherwise ask the person to press it.
+   Run it with the shade's IP, from any machine on the same network as the shades. If the person would rather do it themselves and uses the Home Assistant integration, the Reboot button on the shade's device page does the same thing (it may report that the shade didn't acknowledge, even though it rebooted).
 
 ## Check it worked
 
