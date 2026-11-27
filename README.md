@@ -34,14 +34,25 @@ Set the default with `MODE` and per-shade overrides with `CLIENT_MODES` (e.g. `1
 
 1. Give your shades fixed IPs (DHCP reservations).
 2. Copy this folder to a machine that's always on (a NAS works well), edit `ALLOWED_CLIENTS` in `docker-compose.yml`, and run `docker compose up -d`. Port 60 must be free on that machine.
-3. Rewrite powershades.com to that machine's IP **for the shades only**. With AdGuard Home, add a custom filtering rule (or a blocklist file):
-
-   ```
-   ||powershades.com^$client=192.168.1.50|192.168.1.51,dnsrewrite=192.168.1.10
-   ```
-
-   Pi-hole and others can do the same with a local DNS record, though that applies to every device on the network.
+3. Point the shades at that machine, using one of the two methods below.
 4. Shades pick it up the next time they reconnect (about once a day), or after a reboot.
+
+### Method 1: DNS rewrite (AdGuard Home, Pi-hole or your router)
+
+Rewrite powershades.com to the stub machine's IP **for the shades only**. With AdGuard Home, add a custom filtering rule (or a blocklist file):
+
+```
+||powershades.com^$client=192.168.1.50|192.168.1.51,dnsrewrite=192.168.1.10
+```
+
+Pi-hole and many routers can do the same with a local DNS record, though that usually applies to every device on the network. The shades are left untouched, so undoing it is just removing the rule. This is the method that has been tested.
+
+### Method 2: Server Hostname on the shade
+
+Each shade has a Server Hostname setting (factory value `dashboard.powershades.com` on Gen 1, `cloudserver.powershades.com` on Gen 2). Set it to the stub machine's IP or hostname, for example with the Home Assistant integration's `powershades.set_server_hostname` action or PowerShades' Config.NET app. No DNS server needed, and it's set per shade.
+
+> [!NOTE]
+> Not tested yet. The Home Assistant integration will raise a repair saying the shade isn't talking to PowerShades' servers; that's expected, and you can ignore it for that hostname. A factory reset puts the original hostname back.
 
 ## What to expect
 
