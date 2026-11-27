@@ -55,6 +55,8 @@ Each shade has a Server Hostname setting (factory value `dashboard.powershades.c
 |---|---|
 | An IP address (e.g. `192.168.1.10`) | Doesn't work. The shade sends the IP to DNS as if it were a name and gets "no such name" back. |
 | An mDNS name (e.g. `nas.local`) | Doesn't work. The shade doesn't use mDNS, so the lookup fails the same way. |
+| A public DNS name pointing at the stub's LAN IP (e.g. `stub.example.com` → `192.168.1.10`) | Untested. Should work, since it's an ordinary DNS answer, but some routers and DNS filters block public names that resolve to private IPs (DNS rebinding protection). |
+| A public DNS name pointing at a stub reachable from the internet (a VPS, or port 60 forwarded to it) | Untested. The shade would depend on your internet connection again, and the stub's `ALLOWED_CLIENTS` would need your public IP. A Home Assistant remote URL (Nabu Casa, a Cloudflare tunnel) won't do: those only carry web traffic, and the shade uses raw TCP on port 60. |
 
 A name your DNS server resolves to the stub machine should work, but at that point Method 1 is simpler and leaves the shades untouched. If you change the hostname anyway, the Home Assistant integration will raise a repair saying the shade isn't talking to PowerShades' servers, and a factory reset puts the original hostname back.
 
