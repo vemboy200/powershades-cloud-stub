@@ -2,8 +2,8 @@
 
 A tiny server that stands in for the PowerShades cloud on your own network, so PoE PowerShades shades can be kept off the internet without dropping off your local control (for example the [Home Assistant integration](https://github.com/vemboy200/hass-powershades)).
 
-> [!WARNING]
-> Experimental. Which mode keeps shades happiest is still being tested (see [Status](#status)).
+> [!NOTE]
+> Tested on Gen 1 shades in `listen` mode. Gen 2 is untested (see [Status](#status)).
 
 ## Why
 
@@ -14,6 +14,7 @@ Shades are controlled locally over UDP, but each one also keeps a TCP connection
 | "Disable TCP Cloud" setting on the shade | Dropped off the network every 1-2 minutes |
 | DNS block (NXDOMAIN for powershades.com) | Dropped off for ~12 s every 5-10 minutes |
 | Cloud reachable (normal) | 1-2 short drops a day, when it reconnects |
+| This stub, `listen` mode | 1 short drop a day, when it reconnects (same as normal) |
 
 The idea here: let powershades.com resolve to a machine on your network, so the shade has something to connect to. It never needs to work, it just needs the shade to be happy enough to keep answering local commands.
 
@@ -23,8 +24,8 @@ This does **not** implement the PowerShades cloud. The real handshake is encrypt
 
 | Mode | What the shade gets |
 |---|---|
-| `listen` | A connection that accepts and never replies. Never contacts PowerShades. |
-| `replay` | A recorded server handshake played back. It fails partway, then the shade reconnects. Never contacts PowerShades. Needs `replay.json` (see below). |
+| `listen` (recommended, default) | A connection that accepts and never replies. Never contacts PowerShades. |
+| `replay` (experimental) | A recorded server handshake played back. It fails partway, then the shade reconnects every few seconds, which keeps its LED lit. Never contacts PowerShades. Needs `replay.json` (see below). |
 | `relay` | Passed through to the real PowerShades server, with every byte logged. Useful for recording and debugging. |
 
 Set the default with `MODE` and per-shade overrides with `CLIENT_MODES` (e.g. `192.168.1.51=replay`).
@@ -41,6 +42,15 @@ Set the default with `MODE` and per-shade overrides with `CLIENT_MODES` (e.g. `1
 
    Pi-hole and others can do the same with a local DNS record, though that applies to every device on the network.
 4. Shades pick it up the next time they reconnect (about once a day), or after a reboot.
+
+## What to expect
+
+In `listen` mode the shade keeps one connection open and sends a short message about every 2 minutes, which the stub ignores. Once a day it checks in by opening a new connection (sometimes two, a couple of minutes apart). Each time:
+
+- the shade goes unavailable for about 10-15 seconds in Home Assistant, then comes back;
+- its LED turns green for 2 minutes.
+
+Shades connected to the real PowerShades cloud do the same, so this isn't caused by the stub. In testing, one shade on the real cloud also flashed its LED several times overnight; the `listen` shades didn't.
 
 The server only accepts the IPs in `ALLOWED_CLIENTS`, so it can't be used as an open relay.
 
@@ -60,11 +70,13 @@ Record a real session first, then turn it into `replay.json`:
 
 Each replayed step is logged with `same_as_recording` so you can see where the shade's answers diverge.
 
+Replay keeps the shade available, but the handshake fails within seconds and the shade reconnects, thousands of times a day. Every new connection lights the LED green for 2 minutes, so in practice the LED stays on. Use `listen` unless you're experimenting.
+
 ## Status
 
-- [ ] `listen`: overnight test running (Gen 1)
-- [ ] `replay`: overnight test running (Gen 1)
-- [ ] Gen 2 shades: untested
+- [x] `listen` on Gen 1: works. Tested for about 2 days on two shades: one short drop and one or two LED flashes a day, the same as shades on the real cloud.
+- [x] `replay` on Gen 1: keeps the shade available, but reconnects constantly and keeps the LED lit (see [Replay mode](#replay-mode)).
+- [ ] Gen 2 shades: untested. They connect to cloudserver.powershades.com instead, which the DNS rule above also covers. Reports are welcome.
 
 ## License
 
