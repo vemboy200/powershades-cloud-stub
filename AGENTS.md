@@ -15,7 +15,18 @@ Use `MODE=listen` unless the person specifically wants to record traffic (`relay
 
 Ask for or look up these before changing anything:
 
-- The shades' IP addresses, and whether they're fixed (DHCP reservations). The allowlist and the DNS rule both depend on them.
+- The shades' IP addresses, and whether they're fixed (DHCP reservations). The allowlist and the DNS rule both depend on them. The simplest way is to ask the person. If they don't know, find them with UDP discovery from [pyowershades](https://github.com/vemboy200/pyowershades) (`pip install pyowershades`), run on a machine on the same network as the shades:
+
+  ```python
+  import asyncio
+  from pyowershades import async_discover_devices
+
+  # Pass this machine's own LAN IP (the interface to broadcast from), not the broadcast address.
+  print(asyncio.run(async_discover_devices(["192.168.1.20"])))
+  # [{"ip": "192.168.1.50", "serial": ..., "model": ...}, ...]
+  ```
+
+  Discovery only sends a read-only Get Serial Number broadcast, so it doesn't change or move anything. The router's DHCP client list is another place to look.
 - Which DNS server the shades use (AdGuard Home, Pi-hole, the router, something else) and how the person manages it.
 - Which machine will run the stub, its LAN IP, and whether port 60 is free there (`ss -ltn` or `netstat -an | grep LISTEN`).
 - Whether the shades are Gen 1 (`dashboard.powershades.com`) or Gen 2 (`cloudserver.powershades.com`). Gen 2 is untested: say so, and ask them to report how it goes.
