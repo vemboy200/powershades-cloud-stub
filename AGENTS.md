@@ -13,23 +13,57 @@ Use `MODE=listen` unless the person specifically wants to record traffic (`relay
 
 ## Gather first
 
-Ask for or look up these before changing anything:
+Before changing anything, find out:
 
-- The shades' IP addresses, and whether they're fixed (DHCP reservations). The allowlist and the DNS rule both depend on them. The simplest way is to ask the person. If they don't know, find them with UDP discovery from [pyowershades](https://github.com/vemboy200/pyowershades) (`pip install pyowershades`), run on a machine on the same network as the shades:
+- **The shades: their IPs, generation and current Server Hostname.** Ask the person, or find all three with [pyowershades](https://github.com/vemboy200/pyowershades), which talks to the shades over their local UDP protocol. Install it with `pip install pyowershades` (in a virtual environment) on a machine on the same network as the shades, and run:
 
   ```python
   import asyncio
-  from pyowershades import async_discover_devices
+  import sys
 
-  # Pass this machine's own LAN IP (the interface to broadcast from), not the broadcast address.
-  print(asyncio.run(async_discover_devices(["192.168.1.20"])))
-  # [{"ip": "192.168.1.50", "serial": ..., "model": ...}, ...]
+  from pyowershades import (
+      OP_GET_DEVICE_ID,
+      OP_GET_SERIAL,
+      PowerShadesConnection,
+      PowerShadesTimeoutError,
+      async_discover_devices,
+      parse_device_id_reply,
+      parse_serial_reply,
+  )
+
+
+  async def main(local_ip: str) -> None:
+      for dev in sorted(await async_discover_devices([local_ip]), key=lambda d: d["ip"]):
+          conn = PowerShadesConnection(dev["ip"])
+          await conn.async_connect()
+          try:
+              device_id = parse_device_id_reply(await conn.async_request(OP_GET_DEVICE_ID))
+              serial = parse_serial_reply(await conn.async_request(OP_GET_SERIAL))
+          except PowerShadesTimeoutError:
+              print(dev["ip"], "didn't answer")
+              continue
+          finally:
+              conn.close()
+          if device_id is None:
+              gen = "unknown"
+          else:
+              gen = "Gen 2" if device_id.model_version == 2 else "Gen 1"
+          hostname = serial["server_hostname"] if serial else None
+          print(dev["ip"], gen, hostname)
+
+
+  # Argument: this machine's own LAN IP (the interface to broadcast from), not the broadcast address.
+  asyncio.run(main(sys.argv[1]))
   ```
 
-  Discovery only sends a read-only Get Serial Number broadcast, so it doesn't change or move anything. The router's DHCP client list is another place to look.
-- Which DNS server the shades use (AdGuard Home, Pi-hole, the router, something else) and how the person manages it.
-- Which machine will run the stub, its LAN IP, and whether port 60 is free there (`ss -ltn` or `netstat -an | grep LISTEN`).
-- Whether the shades are Gen 1 (`dashboard.powershades.com`) or Gen 2 (`cloudserver.powershades.com`). Gen 2 is untested: say so, and ask them to report how it goes.
+  It prints one line per shade, such as `192.168.1.50 Gen 1 dashboard.powershades.com`. Everything it sends is a read-only request (discovery, Get Device ID, Get Serial Number), so it doesn't change or move anything. On macOS, the first run may trigger a local network permission prompt, and a sandboxed agent may see no shades until the broadcast is allowed.
+
+  What to do with the results:
+  - **IPs** go in `ALLOWED_CLIENTS` and the DNS rule. Check they're fixed (DHCP reservations), since both depend on them.
+  - **Generation:** Gen 1 shades connect to `dashboard.powershades.com`, Gen 2 to `cloudserver.powershades.com`. Gen 2 is untested: tell the person, and ask them to report how it goes.
+  - **Server Hostname:** if it isn't the factory value for that generation, someone changed it. Ask about it before going further, because a DNS rewrite for powershades.com won't affect a shade pointed somewhere else.
+- **The DNS server** the shades use (AdGuard Home, Pi-hole, the router, something else) and how the person manages it.
+- **The stub machine:** which machine will run it, its LAN IP, and whether port 60 is free there (`ss -ltn` or `netstat -an | grep LISTEN`).
 
 ## Steps
 
